@@ -1,66 +1,101 @@
-use std::{env, io, path::Path};
+use std::{env, io};
+use std::collections::HashMap;
+// mod trie;
 
-/*
+enum Val {
+    Num { value: i64 },
+    Sym { value: String },
+    Bool { value: bool },
+}
 
-Lifecycle: check syntax and convert to AST --> check types of AS --> run!
+type Env = HashMap<String, Val>;
 
-+ Hash map for variable environment
-  --> Environment variables are variables that are persistent across instances of the shell
-  --> aliasing
-+ Built-in syntax: get/set variables, print environment, exit, arithmetic operations, for,
-  while, if, echo (print? show?), sleep/poweroff, functions/lambda, ;, &&, fork (instead of &),
-  fg/bg (maybe lil taskbar sorta thing at the top with fg highlighted OR list when prompted to)
-  --> this syntax does not have to be equivalent to above, but functionality should be more or less
-      the same as in bash
-  --> be smart about what words are reserved (i.e. don't reserve words that might be used as
-      program names)
-  --> split into possible syntactic forms separated by && or ; or nl with binary as its own SF
-      (should act as the catch-all)
-  --> things in parens should be treated as its own expression, with expressions evaluated from
-      inside out --> expressions separated by ;/&&/nl are evaluated sequentially
-  --> will need to parse to convert into abstract syntax tree
-+ Type system
-  --> definitely not inferred
-  --> NUM, BOOL, SYM (it is legal to attempt to invoke a SYM as a command), list
-+ Fast tab completion with trie --> keep all legal words in trie and continue to update
-+ Stream redirection
-+ status (0 or 1) of last program run
-+ command history
-+ secure password entry
-+ script security
-  --> permissions on scripts somehow? how much of this is managed by OS?
-  --> prevent fork bombs
-+ fun easter eggs
-  --> progress ASCII art
-  --> C O L O R S
-  --> COLORIZED matrix + maybe some other ASCII art (maybe for screensaver type feature?)
-  --> exploit the wonders of unicode to make cool art/effects
-*/
+enum Exp {
+    Literal { value: Val },
+    VarName { name: String },
+    If { e1: Box<Exp>, e2: Box<Exp>, e3: Box<Exp> },
+    Let { name: String, e: Box<Exp> },
+    Command { cmd: String, args: String}, // variable lookup --> command
+    Empty {},
+}
 
-fn main() {
-    /* initialization
-            + initialize environment
-            + set default PATH
-            + set current directory to current user's home
-    */
-    let mut command = String::new();
+fn parse_code(code: &str) -> Vec<Exp> {
+    let raw_exps: Vec<&str> = code.split(';' /* | && */).collect();
+    let mut exps = Vec::new();
+    for e in raw_exps {
+        let words = (e as &str).split_whitespace().collect();// this needs to be smarter --> write function
+        exps.push(parse(&words));
+    }
+    exps
+}
 
-    loop {
-        match io::stdin().read_line(&mut command) {
-            Ok(n) => {
-                command.pop();
-                process_command(&command);
+fn parse(words: &Vec<&str>) -> Exp {
+    if words.len() > 0 {
+        match words[0] {
+            "let" => {
+                if words.len() != 3 {
+                    println!("syntax error: \"let\" expects a name followed by an expression");
+                    return Exp::Literal {value: "error".to_string()}; // --> obviously change this
+                } else {
+                    return Exp::Let {
+                        name: words[1].to_string(),
+                        e: Box::new(parse(&words[2..].to_vec()))
+                    };
+                }
+            },
+            _ => return Exp::Literal {value: "lol".to_string()},
+        }
+    } else {
+        Exp::Empty {}
+    }
+}
+
+pub fn eval_exps(exps: Vec<Exp>, &mut env: Env) {
+    for e in exps {
+        eval(e, &mut env);
+    }
+}
+
+fn eval(e: Exp, &mut env: Env) -> Val {
+    match e {
+        Exp::Literal { name } => name,
+        Exp::VarName { name } => {
+            match env.get(name) {
+                Some(value) => value,
+                None => {
+                    println!("error: variable \"{}\" not bound", name);
+                    return;
+                }
             }
-            Err(error) => println!("error: {}", error),
+        },
+        Exp::Let { name, exp } => {
+            env.insert(name, eval(exp, &mut env));
+            Val::Bool { value: true }
         }
     }
 }
 
+fn main() {
+    /* initialization
+            + initialize environment and load environment variables
+            + set default PATH
+            + load .rushrc
+            + set current directory to current user's home
+    */
+    let env: Env = HashMap::new();
+    let mut code = String::new();
 
 
-fn process_command(command: &str) {
-    match command {
-        "cd" => println!("NOICE"),
-        _ => println!("error: command not found"),
+    loop {
+        match io::stdin().read_line(&mut code) {
+            Ok(_n) => {
+                code.pop(); // remove newline
+                let exps = parse_code(&code);
+                //type::type(&exps);
+                eval_exps(&exps, &env);
+
+            }
+            Err(error) => println!("error: {}", error),
+        }
     }
 }
