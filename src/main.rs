@@ -1,8 +1,13 @@
+extern crate regex;
+
+use regex::Regex;
 use std::{env, io};
 use std::collections::HashMap;
+
+
 // mod trie;
 
-/*************************************** definitions *********************************************/
+/********************************* definitions ***************************************************/
 
 enum Val {
     Num { value: i64 },
@@ -14,9 +19,9 @@ enum Val {
 impl Clone for Val {
     fn clone(&self) -> Val {
         match *self {
-            Val::Num { ref value } => Val::Num { value: value.clone()},
-            Val::Sym { ref value } => Val::Sym { value: value.clone()},
-            Val::Bool { ref value } => Val::Bool { value: value.clone()},
+            Val::Num { ref value } => Val::Num { value: value.clone() },
+            Val::Sym { ref value } => Val::Sym { value: value.clone() },
+            Val::Bool { ref value } => Val::Bool { value: value.clone() },
             Val::Nil {} => Val::Nil{},
         }
     }
@@ -30,44 +35,29 @@ enum Exp {
     VarName { name: String },
     //If { e1: Box<Exp>, e2: Box<Exp>, e3: Box<Exp> },
     Let { name: String, e: Box<Exp> },
-    //Command { cmd: String, args: String}, // variable lookup --> command
+    //Command { cmd: String, args: String}, // catch-all
     Empty {},
 }
 
-/******************************************* parser **********************************************/
+/************************************* parser ****************************************************/
 
 fn parse_code(code: &str) -> Vec<Exp> {
-    let raw_exps: Vec<&str> = code.split(';' /* | && */).collect();
+    let concrete_exps: Vec<&str> = code.split(';' /* | && */).collect();
+    let re = Regex::new(r" +|\n+").unwrap();
+    let var_name_re = Regex::new(r":^[a-z_]\\w*$").unwrap();
     let mut exps = Vec::new();
-    for e in raw_exps {
-        let words = (e as &str).split_whitespace().collect();// this needs to be smarter
-        exps.push(parse(&words));
+    for e in concrete_exps {
+        let components = re.split(e as &str).collect();// this needs to be smarter
+        exps.push(parse(&components));
     }
     exps
 }
 
 fn parse(words: &Vec<&str>) -> Exp {
-    if words.len() > 0 {
-        match words[0] {
-            "let" => {
-                if words.len() != 3 {
-                    println!("syntax error: \"let\" expects a name followed by an expression");
-                    return Exp::Empty {}; // --> obviously change this
-                } else {
-                    return Exp::Let {
-                        name: words[1].to_string(),
-                        e: Box::new(parse(&words[2..].to_vec()))
-                    };
-                }
-            },
-            _ => return Exp::Empty {},
-        }
-    } else {
-        Exp::Empty {}
-    }
+    Exp::Empty{}
 }
 
-/****************************************** evaluator ********************************************/
+/*********************************** evaluator ***************************************************/
 
 fn eval_exps(exps: Vec<Exp>, env: &mut Env) {
     for e in exps {

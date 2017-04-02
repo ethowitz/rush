@@ -1,0 +1,8 @@
+exp     := literal
+         | (if [exp] [exp] [exp])
+def     := (let \variable-name [exp])
+literal := SYM | NUM | BOOL
+SYM     := a string of characters matched by the following regular expression:
+           "^[\w\-. ]+$" (quotes are part of the expression)
+NUM     := sequence of digits 0-9 (signed)
+BOOL    := true | false
