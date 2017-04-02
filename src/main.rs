@@ -35,7 +35,7 @@ enum Exp {
     VarName { name: String },
     //If { e1: Box<Exp>, e2: Box<Exp>, e3: Box<Exp> },
     Let { name: String, e: Box<Exp> },
-    //Command { cmd: String, args: String}, // catch-all
+    Command { cmd: String, args: Vec<String> }, // catch-all
     Empty {},
 }
 
@@ -43,8 +43,11 @@ enum Exp {
 
 fn parse_code(code: &str) -> Vec<Exp> {
     let concrete_exps: Vec<&str> = code.split(';' /* | && */).collect();
+
+    /********************************* regex definitions *****************************************/
     let re = Regex::new(r" +|\n+").unwrap();
     let var_name_re = Regex::new(r":^[a-z_]\\w*$").unwrap();
+
     let mut exps = Vec::new();
     for e in concrete_exps {
         let components = re.split(e as &str).collect();// this needs to be smarter

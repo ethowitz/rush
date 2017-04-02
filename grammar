@@ -1,4 +1,12 @@
 exp           := literal
+               | (+ exp exp)
+               | (- exp exp)
+               | (* exp exp)
+               | (/ exp exp)
+               | (% exp exp)
+               | (^ exp exp)
+               | (or exp exp)
+               | (and exp exp)
                | (if exp exp exp)
                | :\variable-name
 def           := (let \variable-name exp)
