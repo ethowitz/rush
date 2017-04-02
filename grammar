@@ -1,13 +1,15 @@
-exp           := literal
-               | (uni-op exp)
-               | (exp {op exp})
-               | (if exp exp exp)
+line          := \exp ;
+exp           := \literal
+               | \uni-op \exp
+               | \factor {\bin-op \exp}?
+               | if \exp then \exp (else \exp)?
                | :\variable-name
 uni-op        := ~ | -
-bin-op        := + | - | * | / | % | and | or
-def           := (let \variable-name exp)
+bin-op        := + | - | * | / | % | < | > | == | <= | >= | and | or
+factor        := NUM | BOOL | (\exp)
+def           := let \variable-name \exp
 literal       := SYM | NUM | BOOL
 variable-name := :^[a-z_]\\w*$
 SYM           := "^[\w\-. ]+$"
-NUM           := sequence of digits 0-9 (signed)
+NUM           := 0-9 | 0-9 followed by NUM (signed)
 BOOL          := true | false

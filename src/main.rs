@@ -44,20 +44,41 @@ enum Exp {
 fn parse_code(code: &str) -> Vec<Exp> {
     let concrete_exps: Vec<&str> = code.split(';' /* | && */).collect();
 
-    /********************************* regex definitions *****************************************/
-    let re = Regex::new(r" +|\n+").unwrap();
-    let var_name_re = Regex::new(r":^[a-z_]\\w*$").unwrap();
-
     let mut exps = Vec::new();
     for e in concrete_exps {
-        let components = re.split(e as &str).collect();// this needs to be smarter
-        exps.push(parse(&components));
+        let mut tokens = tokenize(e);
+        exps.push(parse(tokens));
     }
     exps
 }
 
-fn parse(words: &Vec<&str>) -> Exp {
-    Exp::Empty{}
+fn tokenize(exp: &str) -> Vec<&str> {
+    let re = Regex::new(r" +|\n+").unwrap();
+    re.split(exp).collect()
+}
+
+fn parse(exp: Vec<&str>) -> Exp {
+    /* regex definitions */
+    let var_name_re = Regex::new(r":^[a-z_]\\w*$").unwrap();
+    let sym_re = Regex::new("\"^[\\w\\-. ]+$\"").unwrap();
+
+    Exp::Empty {}
+}
+
+fn expression(tokens: &mut Vec<&str>) {
+
+}
+
+fn uni_op(tokens: &mut Vec<&str>) {
+
+}
+
+fn bin_op(tokens: &mut Vec<&str>) {
+
+}
+
+fn def(tokens: &mut Vec<&str>) {
+
 }
 
 /*********************************** evaluator ***************************************************/
@@ -84,7 +105,8 @@ fn eval(e: Exp, env: &mut Env) -> Val {
             let v = eval(*e, env);
             env.insert(name, v);
             Val::Bool { value: true }
-        }
+        },
+        Exp::Command { cmd, args } => Val::Nil {}, /* replace with command exec */
         Exp::Empty {} => Val::Nil {},
     }
 }
