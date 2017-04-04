@@ -3,11 +3,11 @@ exp           ::= literal
                 | "if" exp "then" exp ("else" exp)*
                 | :variable-name
                 | equality
-equality      ::= compare ( ( "~=" | "==" ) compare )*
+equality      ::= compare ( ( "!=" | "==" ) compare )*
 compare       ::= term ( (">=" | "<=" | "<" | ">") term )*
 term          ::= factor ( ( "-" | "+" ) factor )*
 factor        ::= unary ( ( "/" | "*" | "%" ) unary)*
-unary         ::= ( "~" | "-" ) unary
+unary         ::= ( "!" | "-" ) unary
                 | primary
 primary       ::= NUM | SYM | BOOL | "nil"
                 | "(" expression ")"
