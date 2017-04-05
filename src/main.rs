@@ -5,6 +5,15 @@ use std::{env, io};
 use std::collections::HashMap;
 use std::str::FromStr;
 
+//use std::io::Write;
+
+macro_rules! printerr(
+    ($($arg:tt)*) => { {
+        let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
+        r.expect("failed printing to stderr");
+    } }
+);
+
 // mod trie;
 
 /*
@@ -67,26 +76,27 @@ fn parse(raw_code: &str) -> Vec<Exp> {
         let temp = tokens_re.replace_all(line, |caps: &Captures| format!(" {} ", &caps[0]));
 
         let ts: Vec<&str> = wsnl_re.split(temp.trim()).collect();
-        println!("{}", ts.len());
-        exps.push(parse_line(&mut ts.iter().peekable()));
-        println!("parsed af");
+        match parse_line(&mut ts.iter().peekable()) {
+            Ok(exp) => {exps.push(exp); println!("parsed af");},
+            Err(err) => printerr!("{}", err.to_string()),
+        }
     }
     exps
 }
 
-fn parse_line<'a>(ts: &mut Tokens<'a>) -> Exp {
+fn parse_line<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
     expr(ts)
 }
 
-fn expr<'a>(ts: &mut Tokens<'a>) -> Exp {
+fn expr<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
     equality(ts)
 }
 
-fn equality<'a>(ts: &mut Tokens<'a>) -> Exp {
+fn equality<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
     let mut e = comparison(ts);
 
     // this is not idiomaitc, but rust's while let patterns are not expressive enough :(
-    loop {
+    /*loop {
         if let Some(op) = ts.next() {
             match op.as_ref() {
                 "==" => e = Exp::Binary {
@@ -104,13 +114,13 @@ fn equality<'a>(ts: &mut Tokens<'a>) -> Exp {
         } else {
             break;
         }
-    }
+    }*/
     e
 }
 
-fn comparison<'a>(ts: &mut Tokens<'a>) -> Exp {
+fn comparison<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
     let mut e = term(ts);
-    loop {
+    /*loop {
         if let Some(op) = ts.next() {
             match op.as_ref() {
                 ">" => {
@@ -146,43 +156,39 @@ fn comparison<'a>(ts: &mut Tokens<'a>) -> Exp {
         } else {
             break;
         }
-    }
+    }*/
     e
 }
 
-fn term<'a>(ts: &mut Tokens<'a>) -> Exp {
-    let mut e = factor(ts);
+fn term<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
+    let mut e = try!(factor(ts));
 
     loop {
         if let Some(op) = ts.next() {
             match op.as_ref() {
-                "-" => {
-                    e = Exp::Binary {
+                "-" => e = Exp::Binary {
                         operator: BinaryOp::Sub,
                         left: Box::new(e),
-                        right: Box::new(factor(ts))
-                    }
-                },
-                "+" => {
-                    e = Exp::Binary {
+                        right: Box::new(try!(factor(ts)))
+                    },
+                "+" => e = Exp::Binary {
                         operator: BinaryOp::Div,
                         left: Box::new(e),
-                        right: Box::new(factor(ts))
-                    }
-                },
+                        right: Box::new(try!(factor(ts)))
+                    },
                 _ => break,
             };
         } else {
             break;
         }
     }
-    e
+    Ok(e)
 }
 
-fn factor<'a>(ts: &mut Tokens<'a>) -> Exp {
-    let mut e = unary(ts);
+fn factor<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
+    let mut e = try!(unary(ts));
 
-    loop {
+    /*loop {
         if let Some(op) = ts.next() {
             match op.as_ref() {
                 "/" => {
@@ -211,31 +217,30 @@ fn factor<'a>(ts: &mut Tokens<'a>) -> Exp {
         } else {
             break;
         }
-    }
-    e
+    }*/
+    Ok(e)
 }
 
-fn unary<'a>(ts: &mut Tokens<'a>) -> Exp {
+fn unary<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
     let op = match ts.peek() {
         Some(op) => op.clone(),
-        // TODO: replace with exception to be caught in parse function
-        None => panic!("syntax error")
+        None => return Err("expected unary operator or primary token".to_string()),
     };
 
-    match op.as_ref() {
-        "!" => {
+    match op.as_ref() as &str {
+/*        "!" => {
             let right = unary(ts);
             Exp::Unary { operator: UnaryOp::Inverse, operand: Box::new(right) }
         },
         "-" => {
             let right = unary(ts);
             Exp::Unary { operator: UnaryOp::Negate, operand: Box::new(right) }
-        },
-        _ => primary(ts)
+        },*/
+        _ => primary(ts),
     }
 }
 
-fn primary<'a>(ts: &mut Tokens<'a>) -> Exp {
+fn primary<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
     let num_re = Regex::new(r"-?[0-9]+").unwrap();
     let sym_re = Regex::new("\"[.]\"").unwrap();
 
@@ -243,28 +248,28 @@ fn primary<'a>(ts: &mut Tokens<'a>) -> Exp {
     let next = ts.peek().unwrap().to_string();
 
     match next.as_ref() {
-        "false" => { Exp::Literal { value: Val::Bool { value: false } }},
-        "true" => { Exp::Literal { value: Val::Bool { value: true } }},
-        "nil" => { Exp::Literal { value: Val::Nil }},
+        "false" => { Ok(Exp::Literal { value: Val::Bool { value: false } })},
+        "true" => { Ok(Exp::Literal { value: Val::Bool { value: true } })},
+        "nil" => { Ok(Exp::Literal { value: Val::Nil })},
         "(" => {
             ts.next();
             let e = expr(ts);
 
             // TODO: this is None
             // ---> probably because next() being called somewhere it shouldn't be
-            let close_paren = ts.peek().unwrap().to_string();
+            let close_paren = ts.peek().unwrap().to_string(); //TODO could do this better
             if close_paren != ")".to_string() {
-                panic!("error: missing right parenthesis");
+                return Err("missing closing parenthesis".to_string());
             }
             e
         },
         _ => {
             if num_re.is_match(&next) {
-                Exp::Literal { value: Val::Num { value: i64::from_str(&next).unwrap() } }
+                Ok(Exp::Literal { value: Val::Num { value: i64::from_str(&next).unwrap() } })
             } else if sym_re.is_match(&next) {
-                Exp::Literal { value: Val::Sym { value: next }}
+                Ok(Exp::Literal { value: Val::Sym { value: next }})
             } else {
-                panic!("syntax error at token");
+                return Err("syntax error".to_string());
             }
         }
     }
