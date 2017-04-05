@@ -5,8 +5,6 @@ use std::{env, io};
 use std::collections::HashMap;
 use std::str::FromStr;
 
-//use std::io::Write;
-
 macro_rules! printerr(
     ($($arg:tt)*) => { {
         let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
@@ -14,14 +12,16 @@ macro_rules! printerr(
     } }
 );
 
-// mod trie;
+const VALID_TOKEN_RE: &'static str = "\\+|-|\\*|/|%|!|\\(|\\)|\"|!=|<=|>=|<|>|==";
+const WHITESPACE_NL_RE: &'static str = " +|\\n+";
+const NUM_RE: &'static str = r"-?[0-9]+";
+const SYM_RE: &'static str = "\"[.]\"";
 
 /*
-    TODO 4/4
-    --> think hard about how to handle number 1 vs command 1
-    -------> square-bracket all code?
-    --> make tokenization smarter
-    --> debug 1 + ( 2 + 3 ) expression
+    TODO 4/5
+    --> debug parenthetical expressions
+    ------> figure out where to call next() and where to call peek()
+    --> square-bracket all code?
 */
 
 /********************************* definitions ***************************************************/
@@ -56,7 +56,6 @@ enum Exp {
     Unary { operator: UnaryOp, operand: Box<Exp> },
     //If { e1: Box<Exp>, e2: Box<Exp>, e3: Box<Exp> },
     //Let { name: String, e: Box<Exp> },
-    //Command { cmd: String, args: Vec<String> }, // catch-all
     Empty,
 }
 
@@ -67,25 +66,31 @@ type Tokens<'a> = std::iter::Peekable<std::slice::Iter<'a, &'a str>>;
 // TODO: future goal: split lexical analysis and parsing steps more clearly
 fn parse(raw_code: &str) -> Vec<Exp> {
     let mut exps = Vec::new();
-    let lines = raw_code.trim().split(';'); // TODO handle strings
+    let lines = raw_code.trim().split(';'); // TODO handle SYM
 
     for line in lines {
         // perform lexical analysis
-        let wsnl_re = Regex::new(r" +|\n+").unwrap();
-        let tokens_re = Regex::new("\\+|-|\\*|/|%|!|\\(|\\)|\"|<(?:!=)|>(?:!=)|<=|>=|==|!=").unwrap();
+        let wsnl_re = Regex::new(WHITESPACE_NL_RE).unwrap();
+        let tokens_re = Regex::new(VALID_TOKEN_RE).unwrap();
         let temp = tokens_re.replace_all(line, |caps: &Captures| format!(" {} ", &caps[0]));
 
+        // perform parsing
         let ts: Vec<&str> = wsnl_re.split(temp.trim()).collect();
         match parse_line(&mut ts.iter().peekable()) {
-            Ok(exp) => {exps.push(exp); println!("parsed af");},
-            Err(err) => printerr!("{}", err.to_string()),
+            Ok(exp) => exps.push(exp),
+            Err(err) => printerr!("syntax error: {}", err.to_string()),
         }
     }
     exps
 }
 
 fn parse_line<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
-    expr(ts)
+    let e = try!(expr(ts));
+    if let Some(token) = ts.peek() {
+        Err(format!("unknown token \'{}\'", token))
+    } else {
+        Ok(e)
+    }
 }
 
 fn expr<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
@@ -93,94 +98,99 @@ fn expr<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
 }
 
 fn equality<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
-    let mut e = comparison(ts);
+    let mut e = try!(comparison(ts));
 
-    // this is not idiomaitc, but rust's while let patterns are not expressive enough :(
-    /*loop {
-        if let Some(op) = ts.next() {
-            match op.as_ref() {
-                "==" => e = Exp::Binary {
+    while let Some(op) = ts.clone().peek() {
+        match op.as_ref() {
+            "==" => {
+                ts.next();
+                e = Exp::Binary {
                     operator: BinaryOp::Eq,
                     left: Box::new(e),
-                    right: Box::new(comparison(ts))
-                },
-                "!=" => e = Exp::Binary {
+                    right: Box::new(try!(comparison(ts)))
+                }
+            },
+            "!=" => {
+                ts.next();
+                e = Exp::Binary {
                     operator: BinaryOp::Neq,
                     left: Box::new(e),
-                    right: Box::new(comparison(ts))
-                },
-                _ => break,
-            };
-        } else {
-            break;
+                    right: Box::new(try!(comparison(ts)))
+                }
+            },
+            _ => break,
         }
-    }*/
-    e
+    }
+    Ok(e)
 }
 
 fn comparison<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
-    let mut e = term(ts);
-    /*loop {
-        if let Some(op) = ts.next() {
-            match op.as_ref() {
-                ">" => {
-                    e = Exp::Binary {
-                        operator: BinaryOp::Gt,
-                        left: Box::new(e),
-                        right: Box::new(term(ts))
-                    }
-                },
-                "<" => {
-                    e = Exp::Binary {
-                        operator: BinaryOp::Lt,
-                        left: Box::new(e),
-                        right: Box::new(term(ts))
-                    }
-                },
-                ">=" => {
-                    e = Exp::Binary {
-                        operator: BinaryOp::Gte,
-                        left: Box::new(e),
-                        right: Box::new(term(ts))
-                    }
-                },
-                "<=" => {
-                    e = Exp::Binary {
-                        operator: BinaryOp::Lte,
-                        left: Box::new(e),
-                        right: Box::new(term(ts))
-                    }
-                },
-                _ => break,
-            };
-        } else {
-            break;
+    let mut e = try!(term(ts));
+    while let Some(op) = ts.clone().peek() {
+        match op.as_ref() {
+            ">" => {
+                ts.next();
+                e = Exp::Binary {
+                    operator: BinaryOp::Gt,
+                    left: Box::new(e),
+                    right: Box::new(try!(term(ts)))
+                }
+            },
+            "<" => {
+                ts.next();
+                e = Exp::Binary {
+                    operator: BinaryOp::Lt,
+                    left: Box::new(e),
+                    right: Box::new(try!(term(ts)))
+                }
+            },
+            ">=" => {
+                ts.next();
+                e = Exp::Binary {
+                    operator: BinaryOp::Gte,
+                    left: Box::new(e),
+                    right: Box::new(try!(term(ts)))
+                }
+            },
+            "<=" => {
+                ts.next();
+                e = Exp::Binary {
+                    operator: BinaryOp::Lte,
+                    left: Box::new(e),
+                    right: Box::new(try!(term(ts)))
+                }
+            },
+            _ => break,
         }
-    }*/
-    e
+    }
+    Ok(e)
 }
 
 fn term<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
     let mut e = try!(factor(ts));
 
-    loop {
-        if let Some(op) = ts.next() {
-            match op.as_ref() {
-                "-" => e = Exp::Binary {
-                        operator: BinaryOp::Sub,
-                        left: Box::new(e),
-                        right: Box::new(try!(factor(ts)))
-                    },
-                "+" => e = Exp::Binary {
-                        operator: BinaryOp::Div,
-                        left: Box::new(e),
-                        right: Box::new(try!(factor(ts)))
-                    },
-                _ => break,
-            };
-        } else {
-            break;
-        }
+    // TODO: NOT a permanent solution
+    // this clone is highly inefficient and needs to be changed
+    while let Some(op) = ts.clone().peek() {
+        match op.as_ref() {
+            "-" => {
+                ts.next();
+                e = Exp::Binary {
+                    operator: BinaryOp::Sub,
+                    left: Box::new(e),
+                    right: Box::new(try!(factor(ts)))
+                }
+            },
+            "+" => {
+                ts.next();
+                e = Exp::Binary {
+                    operator: BinaryOp::Add,
+                    left: Box::new(e),
+                    right: Box::new(try!(factor(ts)))
+                }
+            },
+            _ => break,
+        };
     }
     Ok(e)
 }
@@ -188,36 +198,35 @@ fn term<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
 fn factor<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
     let mut e = try!(unary(ts));
 
-    /*loop {
-        if let Some(op) = ts.next() {
-            match op.as_ref() {
-                "/" => {
-                    e = Exp::Binary {
-                        operator: BinaryOp::Div,
-                        left: Box::new(e),
-                        right: Box::new(unary(ts))
-                    }
-                },
-                "*" => {
-                    e = Exp::Binary {
-                        operator: BinaryOp::Mult,
-                        left: Box::new(e),
-                        right: Box::new(unary(ts))
-                    }
-                },
-                "%" => {
-                    e = Exp::Binary {
-                        operator: BinaryOp::Mod,
-                        left: Box::new(e),
-                        right: Box::new(unary(ts))
-                    }
-                },
-                _ => break,
-            };
-        } else {
-            break;
-        }
-    }*/
+    while let Some(op) = ts.clone().peek() {
+        match op.as_ref() {
+            "/" => {
+                ts.next();
+                e = Exp::Binary {
+                    operator: BinaryOp::Div,
+                    left: Box::new(e),
+                    right: Box::new(try!(unary(ts)))
+                }
+            },
+            "*" => {
+                ts.next();
+                e = Exp::Binary {
+                    operator: BinaryOp::Mult,
+                    left: Box::new(e),
+                    right: Box::new(try!(unary(ts)))
+                }
+            },
+            "%" => {
+                ts.next();
+                e = Exp::Binary {
+                    operator: BinaryOp::Mod,
+                    left: Box::new(e),
+                    right: Box::new(try!(unary(ts)))
+                }
+            },
+            _ => break,
+        };
+    }
     Ok(e)
 }
 
@@ -228,48 +237,42 @@ fn unary<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
     };
 
     match op.as_ref() as &str {
-/*        "!" => {
-            let right = unary(ts);
-            Exp::Unary { operator: UnaryOp::Inverse, operand: Box::new(right) }
+        "!" => {
+            Ok(Exp::Unary { operator: UnaryOp::Inverse, operand: Box::new(try!(unary(ts))) })
         },
         "-" => {
-            let right = unary(ts);
-            Exp::Unary { operator: UnaryOp::Negate, operand: Box::new(right) }
-        },*/
+            Ok(Exp::Unary { operator: UnaryOp::Negate, operand: Box::new(try!(unary(ts))) })
+        },
         _ => primary(ts),
     }
 }
 
 fn primary<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
-    let num_re = Regex::new(r"-?[0-9]+").unwrap();
-    let sym_re = Regex::new("\"[.]\"").unwrap();
+    let num_re = Regex::new(NUM_RE).unwrap();
+    let sym_re = Regex::new(SYM_RE).unwrap();
 
     // don't need to match for this because coming directly from unary
-    let next = ts.peek().unwrap().to_string();
+    let next = ts.next().unwrap().to_string();
 
     match next.as_ref() {
-        "false" => { Ok(Exp::Literal { value: Val::Bool { value: false } })},
-        "true" => { Ok(Exp::Literal { value: Val::Bool { value: true } })},
-        "nil" => { Ok(Exp::Literal { value: Val::Nil })},
+        "false" => { Ok(Exp::Literal { value: Val::Bool { value: false } }) },
+        "true" => { Ok(Exp::Literal { value: Val::Bool { value: true } }) },
+        "nil" => { Ok(Exp::Literal { value: Val::Nil }) },
         "(" => {
-            ts.next();
             let e = expr(ts);
-
-            // TODO: this is None
-            // ---> probably because next() being called somewhere it shouldn't be
-            let close_paren = ts.peek().unwrap().to_string(); //TODO could do this better
-            if close_paren != ")".to_string() {
-                return Err("missing closing parenthesis".to_string());
+            match ts.next() {
+                Some(ch) if ch.to_string() == ")".to_string() => e,
+                Some(_) => Err("bug in parser".to_string()),
+                None => Err("missing closing parenthesis".to_string()),
             }
-            e
         },
         _ => {
             if num_re.is_match(&next) {
                 Ok(Exp::Literal { value: Val::Num { value: i64::from_str(&next).unwrap() } })
-            } else if sym_re.is_match(&next) {
+            } /* else if sym_re.is_match(&next) {
                 Ok(Exp::Literal { value: Val::Sym { value: next }})
-            } else {
-                return Err("syntax error".to_string());
+            }*/ else {
+                Err(format!("expected primary token, got {}", next))
             }
         }
     }
@@ -300,7 +303,6 @@ fn eval(e: Exp, env: &mut Env) -> Val {
             env.insert(name, v);
             Val::Bool { value: true }
         },
-        Exp::Command { cmd, args } => Val::Nil {}, /* replace with command exec */
         Exp::Empty {} => Val::Nil {},
     }*/
     Val::Nil {}
@@ -326,11 +328,11 @@ fn main() {
         let mut code = String::new();
         match stdin.lock().read_line(&mut code) {
             Ok(_n) => {
-                code.pop(); // remove newline
+                code.pop();
                 let exps = parse(&code);
                 //eval_exps(exps, &mut env);
             }
-            Err(error) => println!("error: {}", error),
+            Err(error) => printerr!("error: {}", error),
         }
     }
 }
