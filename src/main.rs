@@ -1,5 +1,8 @@
 extern crate regex;
 
+#[macro_use]
+extern crate lazy_static;
+
 use regex::*;
 use std::{env, io};
 use std::collections::HashMap;
@@ -12,16 +15,16 @@ macro_rules! printerr(
     } }
 );
 
-const VALID_TOKEN_RE: &'static str = "\\+|-|\\*|/|%|!|\\(|\\)|\"|!=|<=|>=|<|>|==";
+const VALID_TOKEN_RE: &'static str = "\\+|-|\\*|/|%|!(?:=)|\\(|\\)|\"|!=|<=|>=|<|>|==|&&|\\|\\|";
 const WHITESPACE_NL_RE: &'static str = " +|\\n+";
 const NUM_RE: &'static str = r"-?[0-9]+";
 const SYM_RE: &'static str = "\"[.]\"";
 
 /*
     TODO 4/5
-    --> debug parenthetical expressions
-    ------> figure out where to call next() and where to call peek()
+    --> and & or, exponentiation
     --> square-bracket all code?
+    --> basic shell functionality
 */
 
 /********************************* definitions ***************************************************/
@@ -45,6 +48,12 @@ impl Clone for Val {
 }
 
 type Env = HashMap<String, Val>;
+lazy_static! {
+    static ref ENV: Env = {
+        HashMap::new()
+    };
+}
+
 const PROMPT: &'static str = ">>";
 
 enum BinaryOp { Add, Sub, Mult, Div, Mod, Lt, Gt, Lte, Gte, Eq, Neq, And, Or }
@@ -191,9 +200,11 @@ fn unary<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
 
     match op.as_ref() as &str {
         "!" => {
+            ts.next();
             Ok(Exp::Unary(UnaryOp::Inverse, Box::new(try!(unary(ts)))))
         },
         "-" => {
+            ts.next();
             Ok(Exp::Unary(UnaryOp::Negate, Box::new(try!(unary(ts)))))
         },
         _ => primary(ts),
@@ -242,46 +253,129 @@ fn print_value(v: Val) {
     };
 }
 
-fn eval_exps(exps: Vec<Exp>, env: &mut Env) {
+fn eval_exps(exps: Vec<Exp>) {
     for e in exps {
-        match eval(e, env) {
+        match eval(e) {
             Ok(v) => print_value(v),
             Err(err) => printerr!("error evalution expression: {}", err)
         };
     }
 }
 
-fn unwrap_num(v: Val) -> Result<i64, String> {
+fn expect_num(v: Val) -> Result<i64, String> {
     match v {
         Val::Num(value) => Ok(value),
-        Val::Bool(value) => Err("expected num, got bool".to_string()),
-        Val::Sym(value) => Err("expected num, got sym".to_string()),
+        Val::Bool(_) => Err("expected num, got bool".to_string()),
+        Val::Sym(_) => Err("expected num, got sym".to_string()),
         Val::Nil => Err("expected num, got nil".to_string())
     }
 }
 
-fn eval(e: Exp, env: &mut Env) -> Result<Val, String> {
-    let ev = |e| {
-        match e {
-            Exp::Literal(value) => Ok(value),
-            Exp::Binary(left, op, right) => Err("Unimplemented".to_string()),
-            Exp::Unary(operator, operand) => Err("unimplemented".to_string()),
-            Exp::Empty => Ok(Val::Nil)
+fn expect_bool(v: Val) -> Result<bool, String> {
+    match v {
+        Val::Num(_) => Err("expected bool, got num".to_string()),
+        Val::Bool(value) => Ok(value),
+        Val::Sym(_) => Err("expected bool, got sym".to_string()),
+        Val::Nil => Err("expected bool, got nil".to_string())
+    }
+}
+
+fn eval_binop(l: Exp, op: BinaryOp, r: Exp) -> Result<Val, String> {
+    let lval = try!(eval(l));
+    let rval = try!(eval(r));
+
+    match op {
+        BinaryOp::Add => {
+            let left_val = try!(expect_num(lval));
+            let right_val = try!(expect_num(rval));
+            Ok(Val::Num(left_val + right_val))
+        },
+        BinaryOp::Sub => {
+            let left_val = try!(expect_num(lval));
+            let right_val = try!(expect_num(rval));
+            Ok(Val::Num(left_val - right_val))
+        },
+        BinaryOp::Mult => {
+            let left_val = try!(expect_num(lval));
+            let right_val = try!(expect_num(rval));
+            Ok(Val::Num(left_val * right_val))
+        },
+        BinaryOp::Div => {
+            let left_val = try!(expect_num(lval));
+            let right_val = try!(expect_num(rval));
+            Ok(Val::Num(left_val / right_val))
+        },
+        BinaryOp::Mod => {
+            let left_val = try!(expect_num(lval));
+            let right_val = try!(expect_num(rval));
+            Ok(Val::Num(left_val % right_val))
+        },
+        BinaryOp::Lt => {
+            let left_val = try!(expect_num(lval));
+            let right_val = try!(expect_num(rval));
+            Ok(Val::Bool(left_val < right_val))
+        },
+        BinaryOp::Lte => {
+            let left_val = try!(expect_num(lval));
+            let right_val = try!(expect_num(rval));
+            Ok(Val::Bool(left_val <= right_val))
+        },
+        BinaryOp::Gt => {
+            let left_val = try!(expect_num(lval));
+            let right_val = try!(expect_num(rval));
+            Ok(Val::Bool(left_val > right_val))
+        },
+        BinaryOp::Gte => {
+            let left_val = try!(expect_num(lval));
+            let right_val = try!(expect_num(rval));
+            Ok(Val::Bool(left_val >= right_val))
+        },
+        BinaryOp::Eq => {
+            let left_val = try!(expect_num(lval));
+            let right_val = try!(expect_num(rval));
+            Ok(Val::Bool(left_val == right_val))
+        },
+        BinaryOp::Neq => {
+            let left_val = try!(expect_num(lval));
+            let right_val = try!(expect_num(rval));
+            Ok(Val::Bool(left_val != right_val))
+        },
+        BinaryOp::And => Err("unimplemented".to_string()),
+        BinaryOp::Or => Err("unimplemented".to_string())
+    }
+}
+
+fn eval_unop(operator: UnaryOp, operand: Exp) -> Result<Val, String> {
+    let val = try!(eval(operand));
+    match operator {
+        UnaryOp::Negate => {
+            let number = try!(expect_num(val));
+            Ok(Val::Num(number * -1))
+        },
+        UnaryOp::Inverse => {
+            let boolean = try!(expect_bool(val));
+            Ok(Val::Bool(!boolean))
         }
-    };
-    ev(e)
+    }
+}
+
+fn eval(e: Exp) -> Result<Val, String> {
+    match e {
+        Exp::Literal(value) => Ok(value),
+        Exp::Binary(left, op, right) => eval_binop(*left, op, *right),
+        Exp::Unary(operator, operand) => eval_unop(operator, *operand),
+        Exp::Empty => Ok(Val::Nil)
+    }
 }
 
 /*************************************************************************************************/
 use std::io::prelude::*;
 fn main() {
     /* initialization
-            + initialize environment and load environment variables
             + set default PATH
             + load .rushrc
             + set current directory to current user's home
     */
-    let mut env: Env = HashMap::new();
     let stdin = io::stdin();
 
     loop {
@@ -293,7 +387,7 @@ fn main() {
             Ok(_n) => {
                 code.pop();
                 let exps = parse(&code);
-                eval_exps(exps, &mut env);
+                eval_exps(exps);
             }
             Err(error) => printerr!("error: {}", error),
         }
