@@ -27,18 +27,18 @@ const SYM_RE: &'static str = "\"[.]\"";
 /********************************* definitions ***************************************************/
 
 enum Val {
-    Num { value: i64 },
-    Sym { value: String },
-    Bool { value: bool },
+    Num(i64),
+    Sym(String),
+    Bool(bool),
     Nil,
 }
 
 impl Clone for Val {
     fn clone(&self) -> Val {
         match *self {
-            Val::Num { ref value } => Val::Num { value: value.clone() },
-            Val::Sym { ref value } => Val::Sym { value: value.clone() },
-            Val::Bool { ref value } => Val::Bool { value: value.clone() },
+            Val::Num(ref value) => Val::Num(value.clone()),
+            Val::Sym(ref value) => Val::Sym(value.clone()),
+            Val::Bool(ref value) => Val::Bool(value.clone()),
             Val::Nil => Val::Nil,
         }
     }
@@ -50,12 +50,9 @@ const PROMPT: &'static str = ">>";
 enum BinaryOp { Add, Sub, Mult, Div, Mod, Lt, Gt, Lte, Gte, Eq, Neq, And, Or }
 enum UnaryOp { Negate, Inverse }
 enum Exp {
-    Literal { value: Val },
-    //VarName { name: String },
-    Binary { operator: BinaryOp, left: Box<Exp>, right: Box<Exp>},
-    Unary { operator: UnaryOp, operand: Box<Exp> },
-    //If { e1: Box<Exp>, e2: Box<Exp>, e3: Box<Exp> },
-    //Let { name: String, e: Box<Exp> },
+    Literal(Val),
+    Binary(Box<Exp>, BinaryOp, Box<Exp>),
+    Unary(UnaryOp, Box<Exp>),
     Empty,
 }
 
@@ -104,19 +101,11 @@ fn equality<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
         match op.as_ref() {
             "==" => {
                 ts.next();
-                e = Exp::Binary {
-                    operator: BinaryOp::Eq,
-                    left: Box::new(e),
-                    right: Box::new(try!(comparison(ts)))
-                }
+                e = Exp::Binary(Box::new(e), BinaryOp::Eq, Box::new(try!(comparison(ts))))
             },
             "!=" => {
                 ts.next();
-                e = Exp::Binary {
-                    operator: BinaryOp::Neq,
-                    left: Box::new(e),
-                    right: Box::new(try!(comparison(ts)))
-                }
+                e = Exp::Binary(Box::new(e), BinaryOp::Neq, Box::new(try!(comparison(ts))))
             },
             _ => break,
         }
@@ -130,35 +119,19 @@ fn comparison<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
         match op.as_ref() {
             ">" => {
                 ts.next();
-                e = Exp::Binary {
-                    operator: BinaryOp::Gt,
-                    left: Box::new(e),
-                    right: Box::new(try!(term(ts)))
-                }
+                e = Exp::Binary(Box::new(e), BinaryOp::Gt, Box::new(try!(term(ts))))
             },
             "<" => {
                 ts.next();
-                e = Exp::Binary {
-                    operator: BinaryOp::Lt,
-                    left: Box::new(e),
-                    right: Box::new(try!(term(ts)))
-                }
+                e = Exp::Binary(Box::new(e), BinaryOp::Lt, Box::new(try!(term(ts))))
             },
             ">=" => {
                 ts.next();
-                e = Exp::Binary {
-                    operator: BinaryOp::Gte,
-                    left: Box::new(e),
-                    right: Box::new(try!(term(ts)))
-                }
+                e = Exp::Binary(Box::new(e), BinaryOp::Gte, Box::new(try!(term(ts))))
             },
             "<=" => {
                 ts.next();
-                e = Exp::Binary {
-                    operator: BinaryOp::Lte,
-                    left: Box::new(e),
-                    right: Box::new(try!(term(ts)))
-                }
+                e = Exp::Binary(Box::new(e), BinaryOp::Lte, Box::new(try!(term(ts))))
             },
             _ => break,
         }
@@ -175,19 +148,11 @@ fn term<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
         match op.as_ref() {
             "-" => {
                 ts.next();
-                e = Exp::Binary {
-                    operator: BinaryOp::Sub,
-                    left: Box::new(e),
-                    right: Box::new(try!(factor(ts)))
-                }
+                e = Exp::Binary(Box::new(e), BinaryOp::Sub, Box::new(try!(factor(ts))))
             },
             "+" => {
                 ts.next();
-                e = Exp::Binary {
-                    operator: BinaryOp::Add,
-                    left: Box::new(e),
-                    right: Box::new(try!(factor(ts)))
-                }
+                e = Exp::Binary(Box::new(e), BinaryOp::Add, Box::new(try!(factor(ts))))
             },
             _ => break,
         };
@@ -202,27 +167,15 @@ fn factor<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
         match op.as_ref() {
             "/" => {
                 ts.next();
-                e = Exp::Binary {
-                    operator: BinaryOp::Div,
-                    left: Box::new(e),
-                    right: Box::new(try!(unary(ts)))
-                }
+                e = Exp::Binary(Box::new(e), BinaryOp::Div, Box::new(try!(unary(ts))))
             },
             "*" => {
                 ts.next();
-                e = Exp::Binary {
-                    operator: BinaryOp::Mult,
-                    left: Box::new(e),
-                    right: Box::new(try!(unary(ts)))
-                }
+                e = Exp::Binary(Box::new(e), BinaryOp::Mult, Box::new(try!(unary(ts))))
             },
             "%" => {
                 ts.next();
-                e = Exp::Binary {
-                    operator: BinaryOp::Mod,
-                    left: Box::new(e),
-                    right: Box::new(try!(unary(ts)))
-                }
+                e = Exp::Binary(Box::new(e), BinaryOp::Mod, Box::new(try!(unary(ts))))
             },
             _ => break,
         };
@@ -238,10 +191,10 @@ fn unary<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
 
     match op.as_ref() as &str {
         "!" => {
-            Ok(Exp::Unary { operator: UnaryOp::Inverse, operand: Box::new(try!(unary(ts))) })
+            Ok(Exp::Unary(UnaryOp::Inverse, Box::new(try!(unary(ts)))))
         },
         "-" => {
-            Ok(Exp::Unary { operator: UnaryOp::Negate, operand: Box::new(try!(unary(ts))) })
+            Ok(Exp::Unary(UnaryOp::Negate, Box::new(try!(unary(ts)))))
         },
         _ => primary(ts),
     }
@@ -255,9 +208,9 @@ fn primary<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
     let next = ts.next().unwrap().to_string();
 
     match next.as_ref() {
-        "false" => { Ok(Exp::Literal { value: Val::Bool { value: false } }) },
-        "true" => { Ok(Exp::Literal { value: Val::Bool { value: true } }) },
-        "nil" => { Ok(Exp::Literal { value: Val::Nil }) },
+        "false" => Ok(Exp::Literal(Val::Bool(false))),
+        "true" => Ok(Exp::Literal(Val::Bool(true))),
+        "nil" => Ok(Exp::Literal(Val::Nil)),
         "(" => {
             let e = expr(ts);
             match ts.next() {
@@ -268,7 +221,7 @@ fn primary<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
         },
         _ => {
             if num_re.is_match(&next) {
-                Ok(Exp::Literal { value: Val::Num { value: i64::from_str(&next).unwrap() } })
+                Ok(Exp::Literal(Val::Num(i64::from_str(&next).unwrap())))
             } /* else if sym_re.is_match(&next) {
                 Ok(Exp::Literal { value: Val::Sym { value: next }})
             }*/ else {
@@ -279,35 +232,46 @@ fn primary<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
 }
 
 /*********************************** evaluator ***************************************************/
-/*
+
+fn print_value(v: Val) {
+    match v {
+        Val::Num(value) => println!("{} : Num", value),
+        Val::Bool(value) => println!("{} : Bool", value),
+        Val::Sym(value) => println!("{} : Sym", value ),
+        Val::Nil => println!("nil : Nil")
+    };
+}
+
 fn eval_exps(exps: Vec<Exp>, env: &mut Env) {
     for e in exps {
-        eval(e, env);
+        match eval(e, env) {
+            Ok(v) => print_value(v),
+            Err(err) => printerr!("error evalution expression: {}", err)
+        };
     }
 }
 
-fn eval(e: Exp, env: &mut Env) -> Val {
-/*    match e {
-        Exp::Literal { value } => value,
-        Exp::VarName { name } => {
-            match env.get(&name) {
-                Some(value) => (*value).clone(),
-                None => {
-                    println!("error: variable \"{}\" not bound", name);
-                    Val::Nil {}
-                }
-            }
-        },
-        Exp::Let { name, e } => {
-            let v = eval(*e, env);
-            env.insert(name, v);
-            Val::Bool { value: true }
-        },
-        Exp::Empty {} => Val::Nil {},
-    }*/
-    Val::Nil {}
+fn unwrap_num(v: Val) -> Result<i64, String> {
+    match v {
+        Val::Num(value) => Ok(value),
+        Val::Bool(value) => Err("expected num, got bool".to_string()),
+        Val::Sym(value) => Err("expected num, got sym".to_string()),
+        Val::Nil => Err("expected num, got nil".to_string())
+    }
 }
-*/
+
+fn eval(e: Exp, env: &mut Env) -> Result<Val, String> {
+    let ev = |e| {
+        match e {
+            Exp::Literal(value) => Ok(value),
+            Exp::Binary(left, op, right) => Err("Unimplemented".to_string()),
+            Exp::Unary(operator, operand) => Err("unimplemented".to_string()),
+            Exp::Empty => Ok(Val::Nil)
+        }
+    };
+    ev(e)
+}
+
 /*************************************************************************************************/
 use std::io::prelude::*;
 fn main() {
@@ -320,7 +284,6 @@ fn main() {
     let mut env: Env = HashMap::new();
     let stdin = io::stdin();
 
-
     loop {
         print!("{} ", PROMPT);
         io::Write::flush(&mut io::stdout()).expect("flush failed!");
@@ -330,7 +293,7 @@ fn main() {
             Ok(_n) => {
                 code.pop();
                 let exps = parse(&code);
-                //eval_exps(exps, &mut env);
+                eval_exps(exps, &mut env);
             }
             Err(error) => printerr!("error: {}", error),
         }
