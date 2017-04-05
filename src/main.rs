@@ -1,11 +1,19 @@
 extern crate regex;
 
-use regex::Regex;
+use regex::*;
 use std::{env, io};
 use std::collections::HashMap;
 use std::str::FromStr;
 
 // mod trie;
+
+/*
+    TODO 4/4
+    --> think hard about how to handle number 1 vs command 1
+    -------> square-bracket all code?
+    --> make tokenization smarter
+    --> debug 1 + ( 2 + 3 ) expression
+*/
 
 /********************************* definitions ***************************************************/
 
@@ -47,20 +55,18 @@ enum Exp {
 
 type Tokens<'a> = std::iter::Peekable<std::slice::Iter<'a, &'a str>>;
 
-// TODO: currently this would only recognize 1 + 2 and not 1+2
-//      --> replace important every "token" with " token " to ensure split will catch
-//          all the important tokens
-fn tokenize<'a>(exp: &'a str) -> Vec<&'a str> {
-    let re = Regex::new(r" +|\n+").unwrap();
-    re.split(exp.trim()).collect()
-}
-
+// TODO: future goal: split lexical analysis and parsing steps more clearly
 fn parse(raw_code: &str) -> Vec<Exp> {
     let mut exps = Vec::new();
-    let lines = raw_code.trim().split(';');
+    let lines = raw_code.trim().split(';'); // TODO handle strings
 
-    for line in lines { // TODO handle strings
-        let ts = tokenize(line);
+    for line in lines {
+        // perform lexical analysis
+        let wsnl_re = Regex::new(r" +|\n+").unwrap();
+        let tokens_re = Regex::new("\\+|-|\\*|/|%|!|\\(|\\)|\"|<(?:!=)|>(?:!=)|<=|>=|==|!=").unwrap();
+        let temp = tokens_re.replace_all(line, |caps: &Captures| format!(" {} ", &caps[0]));
+
+        let ts: Vec<&str> = wsnl_re.split(temp.trim()).collect();
         println!("{}", ts.len());
         exps.push(parse_line(&mut ts.iter().peekable()));
         println!("parsed af");
@@ -79,7 +85,7 @@ fn expr<'a>(ts: &mut Tokens<'a>) -> Exp {
 fn equality<'a>(ts: &mut Tokens<'a>) -> Exp {
     let mut e = comparison(ts);
 
-    // this is not so idiomaitc, but rust's while let patterns are not expressive enough :(
+    // this is not idiomaitc, but rust's while let patterns are not expressive enough :(
     loop {
         if let Some(op) = ts.next() {
             match op.as_ref() {
@@ -212,6 +218,7 @@ fn factor<'a>(ts: &mut Tokens<'a>) -> Exp {
 fn unary<'a>(ts: &mut Tokens<'a>) -> Exp {
     let op = match ts.peek() {
         Some(op) => op.clone(),
+        // TODO: replace with exception to be caught in parse function
         None => panic!("syntax error")
     };
 
