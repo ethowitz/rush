@@ -285,61 +285,17 @@ fn eval_binop(l: Exp, op: BinaryOp, r: Exp) -> Result<Val, String> {
     let rval = try!(eval(r));
 
     match op {
-        BinaryOp::Add => {
-            let left_val = try!(expect_num(lval));
-            let right_val = try!(expect_num(rval));
-            Ok(Val::Num(left_val + right_val))
-        },
-        BinaryOp::Sub => {
-            let left_val = try!(expect_num(lval));
-            let right_val = try!(expect_num(rval));
-            Ok(Val::Num(left_val - right_val))
-        },
-        BinaryOp::Mult => {
-            let left_val = try!(expect_num(lval));
-            let right_val = try!(expect_num(rval));
-            Ok(Val::Num(left_val * right_val))
-        },
-        BinaryOp::Div => {
-            let left_val = try!(expect_num(lval));
-            let right_val = try!(expect_num(rval));
-            Ok(Val::Num(left_val / right_val))
-        },
-        BinaryOp::Mod => {
-            let left_val = try!(expect_num(lval));
-            let right_val = try!(expect_num(rval));
-            Ok(Val::Num(left_val % right_val))
-        },
-        BinaryOp::Lt => {
-            let left_val = try!(expect_num(lval));
-            let right_val = try!(expect_num(rval));
-            Ok(Val::Bool(left_val < right_val))
-        },
-        BinaryOp::Lte => {
-            let left_val = try!(expect_num(lval));
-            let right_val = try!(expect_num(rval));
-            Ok(Val::Bool(left_val <= right_val))
-        },
-        BinaryOp::Gt => {
-            let left_val = try!(expect_num(lval));
-            let right_val = try!(expect_num(rval));
-            Ok(Val::Bool(left_val > right_val))
-        },
-        BinaryOp::Gte => {
-            let left_val = try!(expect_num(lval));
-            let right_val = try!(expect_num(rval));
-            Ok(Val::Bool(left_val >= right_val))
-        },
-        BinaryOp::Eq => {
-            let left_val = try!(expect_num(lval));
-            let right_val = try!(expect_num(rval));
-            Ok(Val::Bool(left_val == right_val))
-        },
-        BinaryOp::Neq => {
-            let left_val = try!(expect_num(lval));
-            let right_val = try!(expect_num(rval));
-            Ok(Val::Bool(left_val != right_val))
-        },
+        BinaryOp::Add => Ok(Val::Num(try!(expect_num(lval)) + try!(expect_num(rval)))),
+        BinaryOp::Sub => Ok(Val::Num(try!(expect_num(lval)) - try!(expect_num(rval)))),
+        BinaryOp::Mult => Ok(Val::Num(try!(expect_num(lval)) * try!(expect_num(rval)))),
+        BinaryOp::Div => Ok(Val::Num(try!(expect_num(lval)) / try!(expect_num(rval)))),
+        BinaryOp::Mod => Ok(Val::Num(try!(expect_num(lval)) % try!(expect_num(rval)))),
+        BinaryOp::Lt => Ok(Val::Bool(try!(expect_bool(lval)) < try!(expect_bool(rval)))),
+        BinaryOp::Lte => Ok(Val::Bool(try!(expect_bool(lval)) <= try!(expect_bool(rval)))),
+        BinaryOp::Gt => Ok(Val::Bool(try!(expect_bool(lval)) > try!(expect_bool(rval)))),
+        BinaryOp::Gte => Ok(Val::Bool(try!(expect_bool(lval)) >= try!(expect_bool(rval)))),
+        BinaryOp::Eq => Ok(Val::Bool(try!(expect_bool(lval)) == try!(expect_bool(rval)))),
+        BinaryOp::Neq => Ok(Val::Bool(try!(expect_bool(lval)) != try!(expect_bool(rval)))),
         BinaryOp::And => Err("unimplemented".to_string()),
         BinaryOp::Or => Err("unimplemented".to_string())
     }
@@ -348,14 +304,8 @@ fn eval_binop(l: Exp, op: BinaryOp, r: Exp) -> Result<Val, String> {
 fn eval_unop(operator: UnaryOp, operand: Exp) -> Result<Val, String> {
     let val = try!(eval(operand));
     match operator {
-        UnaryOp::Negate => {
-            let number = try!(expect_num(val));
-            Ok(Val::Num(number * -1))
-        },
-        UnaryOp::Inverse => {
-            let boolean = try!(expect_bool(val));
-            Ok(Val::Bool(!boolean))
-        }
+        UnaryOp::Negate => Ok(Val::Num(try!(expect_num(val)) * -1 )),
+        UnaryOp::Inverse => Ok(Val::Num(try!(expect_num(val)) * -1 )),
     }
 }
 
