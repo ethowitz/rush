@@ -1,10 +1,11 @@
-line          ::= exp ;
 exp           ::= literal
                 | "if" exp "then" exp "else" exp
                 | :variable-name
                 | equality
+                | exp (; exp)*
 equality      ::= compare ( ( "!=" | "==" ) compare )*
-compare       ::= term ( (">=" | "<=" | "<" | ">") term )*
+compare       ::= boolop ( (">=" | "<=" | "<" | ">") boolop )*
+boolop        ::= term ( ("and" | "or") term)*
 term          ::= factor ( ( "-" | "+" ) factor )*
 factor        ::= unary ( ( "/" | "*" | "%" ) unary)*
 unary         ::= ( "!" | "-" ) unary
