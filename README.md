@@ -1,34 +1,48 @@
-Lifecycle: check syntax and convert to AST --> check types of AS --> run!
+# Rush
 
-+ Hash map for variable environment
-  --> Environment variables are variables that are persistent across instances of the shell
-  --> aliasing
-+ Built-in syntax: get/set variables, print environment, exit, arithmetic operations, for,
-  while, if, echo (print? show?), sleep/poweroff, functions/lambda, ;, &&, fork (instead of &),
-  fg/bg (maybe lil taskbar sorta thing at the top with fg highlighted OR list when prompted to)
-  --> this syntax does not have to be equivalent to above, but functionality should be more or less
-      the same as in bash
-  --> be smart about what words are reserved (i.e. don't reserve words that might be used as
-      program names)
-  --> split into possible syntactic forms separated by && or ; or nl with binary as its own SF
-      (should act as the catch-all)
-  --> things in parens should be treated as its own expression, with expressions evaluated from
-      inside out --> expressions separated by ;/&&/nl are evaluated sequentially
-  --> will need to parse to convert into abstract syntax tree
-+ Type system
-  --> definitely not inferred
-  --> NUM, BOOL, SYM (it is legal to attempt to invoke a SYM as a command), list
-+ Fast tab completion with trie --> keep all legal words in trie and continue to update
-+ Stream redirection
-+ status (0 or 1) of last program run
-+ command history
-+ secure password entry
-+ script security
-  --> permissions on scripts somehow? how much of this is managed by OS?
-  --> prevent fork bombs
-+ .rushrc
-+ fun easter eggs
-  --> progress ASCII art
-  --> C O L O R S
-  --> COLORIZED matrix + maybe some other ASCII art (maybe for screensaver type feature?)
-  --> exploit the wonders of unicode to make cool art/effects
+## Description
+Rush (Rust Shell) is a command shell and expression-based scripting language
+that aims to have intuitive and transparent syntax, making directory navigation
+and system administration absolutely blissful.
+
+## Grammar and Syntax
+Rush's grammar is LL(1) which gives parsing via a recursive descent parser a
+time complexity of O(n). Expressions are always enclosed in square brackets and
+can be executed imperatively when separated by semicolons. Once the core of Rush
+is completed, I will add example programs/tutorials that demonstrate its
+syntax.
+
+## Parser
+The parser is implemented as a recursive descent parser, where every
+non-terminal component of the grammar has its own function (these functions are
+mutually recursive).
+
+## Abstract Syntax and Evaluation
+Expressions are represented in the code as enums with the different syntactic
+forms as the fields. Values are represented in the code as enums with possible
+types NUM (a 64-bit, signed integer), SYM (a string of characters), BOOL, and
+NIL.
+
+## Road Map
+These are the features I intend to implement in the near-future:
++ Command execution
++ I/O redirection and piping
++ Foreground/background processes
++ Command history and scrolling
++ Cursor movement via the arrow keys
++ SYM
++ for and while loops
++ print
++ Set custom prompt
++ Variable bindings (disallowing the binding of Rush keywords)
++ Config file, environment variables, PATH, and command aliasing
++ Current directory
++ Expressions embedded in commands (e.g. an expression can be evaluated to an
+  argument or even the name of a command to be executed)
++ Lambda
++ Predefined functions and lists
++ Invocation of the bash interpreter for backwards compatibility
++ Tab completion via a Trie
++ Status (0 or 1) of last program run
++ Secure password entry
++ Clear, reset, exit, poweroff, sleep
