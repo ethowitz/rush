@@ -5,7 +5,7 @@ exp           ::= literal
                 | exp (; exp)*
 equality      ::= compare ( ( "!=" | "==" ) compare )*
 compare       ::= boolop ( (">=" | "<=" | "<" | ">") boolop )*
-boolop        ::= term ( ("and" | "or") term)*
+boolop        ::= term ( ("and" | "or" | "&&" | "or") term)*
 term          ::= factor ( ( "-" | "+" ) factor )*
 factor        ::= unary ( ( "/" | "*" | "%" ) unary)*
 unary         ::= ( "!" | "-" ) unary

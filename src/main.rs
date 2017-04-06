@@ -150,24 +150,42 @@ fn equality<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
 }
 
 fn comparison<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
-    let mut e = try!(term(ts));
+    let mut e = try!(boolop(ts));
     while let Some(op) = ts.clone().peek() {
         match op.as_ref() {
             ">" => {
                 ts.next();
-                e = Exp::Binary(Box::new(e), BinaryOp::Gt, Box::new(try!(term(ts))))
+                e = Exp::Binary(Box::new(e), BinaryOp::Gt, Box::new(try!(boolop(ts))))
             },
             "<" => {
                 ts.next();
-                e = Exp::Binary(Box::new(e), BinaryOp::Lt, Box::new(try!(term(ts))))
+                e = Exp::Binary(Box::new(e), BinaryOp::Lt, Box::new(try!(boolop(ts))))
             },
             ">=" => {
                 ts.next();
-                e = Exp::Binary(Box::new(e), BinaryOp::Gte, Box::new(try!(term(ts))))
+                e = Exp::Binary(Box::new(e), BinaryOp::Gte, Box::new(try!(boolop(ts))))
             },
             "<=" => {
                 ts.next();
-                e = Exp::Binary(Box::new(e), BinaryOp::Lte, Box::new(try!(term(ts))))
+                e = Exp::Binary(Box::new(e), BinaryOp::Lte, Box::new(try!(boolop(ts))))
+            },
+            _ => break,
+        }
+    }
+    Ok(e)
+}
+
+fn boolop<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
+    let mut e = try!(term(ts));
+    while let Some(op) = ts.clone().peek() {
+        match op.as_ref() {
+            "&&" | "and" => {
+                ts.next();
+                e = Exp::Binary(Box::new(e), BinaryOp::And, Box::new(try!(term(ts))))
+            },
+            "||" | "or" => {
+                ts.next();
+                e = Exp::Binary(Box::new(e), BinaryOp::Or, Box::new(try!(term(ts))))
             },
             _ => break,
         }
@@ -323,8 +341,8 @@ fn eval_binop(l: Exp, op: BinaryOp, r: Exp) -> Result<Val, String> {
         BinaryOp::Gte => Ok(Val::Bool(try!(expect_num(lval)) >= try!(expect_num(rval)))),
         BinaryOp::Eq => Ok(Val::Bool(try!(expect_num(lval)) == try!(expect_num(rval)))),
         BinaryOp::Neq => Ok(Val::Bool(try!(expect_num(lval)) != try!(expect_num(rval)))),
-        BinaryOp::And => Err("unimplemented".to_string()),
-        BinaryOp::Or => Err("unimplemented".to_string())
+        BinaryOp::And => Ok(Val::Bool(try!(expect_bool(lval)) && try!(expect_bool(rval)))),
+        BinaryOp::Or => Ok(Val::Bool(try!(expect_bool(lval)) || try!(expect_bool(rval))))
     }
 }
 
