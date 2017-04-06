@@ -15,7 +15,8 @@ macro_rules! printerr(
     } }
 );
 
-const VALID_TOKEN_RE: &'static str = "\\+|-|\\*|/|%|!(?:=)|\\(|\\)|\"|!=|<=|>=|<|>|==|&&|\\|\\|";
+const VALID_TOKEN_RE: &'static str =
+    "\\+|-|\\*|/|%|!(?:=)|\\(|\\)|\"|!=|<=|>=|<|>|==|&&|\\|\\||if|then|else";
 const WHITESPACE_NL_RE: &'static str = " +|\\n+";
 const NUM_RE: &'static str = r"-?[0-9]+";
 const SYM_RE: &'static str = "\"[.]\"";
@@ -54,7 +55,7 @@ lazy_static! {
     };
 }
 
-const PROMPT: &'static str = ">>";
+const PROMPT: &'static str = "->";
 
 enum BinaryOp { Add, Sub, Mult, Div, Mod, Lt, Gt, Lte, Gte, Eq, Neq, And, Or }
 enum UnaryOp { Negate, Inverse }
@@ -62,6 +63,7 @@ enum Exp {
     Literal(Val),
     Binary(Box<Exp>, BinaryOp, Box<Exp>),
     Unary(UnaryOp, Box<Exp>),
+    If(Box<Exp>, Box<Exp>, Box<Exp>),
     Empty,
 }
 
@@ -100,7 +102,32 @@ fn parse_line<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
 }
 
 fn expr<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
-    equality(ts)
+    if let Some(token) = ts.clone().peek() {
+        if token.to_string() == "if".to_string() {
+            ts.next();
+            let cond = try!(expr(ts));
+            if let Some(token) = ts.clone().peek() {
+                if token.to_string() != "then".to_string() {
+                    return Err(format!("expected token \'then\', got {}", token));
+                }
+            }
+            ts.next();
+            let branch1 = try!(expr(ts));
+
+            if let Some(token) = ts.clone().next() {
+                if token.to_string() != "else".to_string() {
+                    return Err(format!("expected token \'then\', got {}", token));
+                }
+            }
+            ts.next();
+            let branch2 = try!(expr(ts));
+            Ok(Exp::If(Box::new(cond), Box::new(branch1), Box::new(branch2)))
+        } else {
+            equality(ts)
+        }
+    } else{
+        Ok(Exp::Empty)
+    }
 }
 
 fn equality<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
@@ -213,7 +240,7 @@ fn unary<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
 
 fn primary<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
     let num_re = Regex::new(NUM_RE).unwrap();
-    let sym_re = Regex::new(SYM_RE).unwrap();
+    let _sym_re = Regex::new(SYM_RE).unwrap();
 
     // don't need to match for this because coming directly from unary
     let next = ts.next().unwrap().to_string();
@@ -290,12 +317,12 @@ fn eval_binop(l: Exp, op: BinaryOp, r: Exp) -> Result<Val, String> {
         BinaryOp::Mult => Ok(Val::Num(try!(expect_num(lval)) * try!(expect_num(rval)))),
         BinaryOp::Div => Ok(Val::Num(try!(expect_num(lval)) / try!(expect_num(rval)))),
         BinaryOp::Mod => Ok(Val::Num(try!(expect_num(lval)) % try!(expect_num(rval)))),
-        BinaryOp::Lt => Ok(Val::Bool(try!(expect_bool(lval)) < try!(expect_bool(rval)))),
-        BinaryOp::Lte => Ok(Val::Bool(try!(expect_bool(lval)) <= try!(expect_bool(rval)))),
-        BinaryOp::Gt => Ok(Val::Bool(try!(expect_bool(lval)) > try!(expect_bool(rval)))),
-        BinaryOp::Gte => Ok(Val::Bool(try!(expect_bool(lval)) >= try!(expect_bool(rval)))),
-        BinaryOp::Eq => Ok(Val::Bool(try!(expect_bool(lval)) == try!(expect_bool(rval)))),
-        BinaryOp::Neq => Ok(Val::Bool(try!(expect_bool(lval)) != try!(expect_bool(rval)))),
+        BinaryOp::Lt => Ok(Val::Bool(try!(expect_num(lval)) < try!(expect_num(rval)))),
+        BinaryOp::Lte => Ok(Val::Bool(try!(expect_num(lval)) <= try!(expect_num(rval)))),
+        BinaryOp::Gt => Ok(Val::Bool(try!(expect_num(lval)) > try!(expect_num(rval)))),
+        BinaryOp::Gte => Ok(Val::Bool(try!(expect_num(lval)) >= try!(expect_num(rval)))),
+        BinaryOp::Eq => Ok(Val::Bool(try!(expect_num(lval)) == try!(expect_num(rval)))),
+        BinaryOp::Neq => Ok(Val::Bool(try!(expect_num(lval)) != try!(expect_num(rval)))),
         BinaryOp::And => Err("unimplemented".to_string()),
         BinaryOp::Or => Err("unimplemented".to_string())
     }
@@ -309,11 +336,20 @@ fn eval_unop(operator: UnaryOp, operand: Exp) -> Result<Val, String> {
     }
 }
 
+fn eval_if(cond: Exp, branch1: Exp, branch2: Exp) -> Result<Val, String> {
+    if try!(expect_bool(try!(eval(cond)))) {
+        eval(branch1)
+    } else {
+        eval(branch2)
+    }
+}
+
 fn eval(e: Exp) -> Result<Val, String> {
     match e {
         Exp::Literal(value) => Ok(value),
         Exp::Binary(left, op, right) => eval_binop(*left, op, *right),
         Exp::Unary(operator, operand) => eval_unop(operator, *operand),
+        Exp::If(cond, branch1, branch2) => eval_if(*cond, *branch1, *branch2),
         Exp::Empty => Ok(Val::Nil)
     }
 }

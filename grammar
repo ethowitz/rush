@@ -1,6 +1,6 @@
 line          ::= exp ;
 exp           ::= literal
-                | "if" exp "then" exp ("else" exp)*
+                | "if" exp "then" exp "else" exp
                 | :variable-name
                 | equality
 equality      ::= compare ( ( "!=" | "==" ) compare )*
