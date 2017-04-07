@@ -1,3 +1,4 @@
+command       ::= name (arg_name | [exp])* (; command)
 exp           ::= literal
                 | "if" exp "then" exp "else" exp
                 | :variable-name

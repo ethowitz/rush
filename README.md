@@ -25,6 +25,8 @@ NIL.
 
 ## Road Map
 These are the features I intend to implement in the near-future:
++ Parenthetical expressions do not have to be typed in on a single line in the
+  interactive interpreter
 + Command execution
 + I/O redirection and piping
 + Foreground/background processes

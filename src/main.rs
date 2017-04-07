@@ -23,7 +23,6 @@ const SYM_RE: &'static str = "\"[.]\"";
 
 /*
     TODO 4/5
-    --> and & or, exponentiation
     --> square-bracket all code?
     --> basic shell functionality
 */
@@ -385,7 +384,7 @@ fn main() {
     loop {
         print!("{} ", PROMPT);
         io::Write::flush(&mut io::stdout()).expect("flush failed!");
-
+        
         let mut code = String::new();
         match stdin.lock().read_line(&mut code) {
             Ok(_n) => {
