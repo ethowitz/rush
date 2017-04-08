@@ -17,6 +17,7 @@ macro_rules! printerr(
 
 const VALID_TOKEN_RE: &'static str =
     "\\+|-|\\*|/|%|!(?:=)|\\(|\\)|\"|!=|<=|>=|<|>|==|&&|\\|\\||if|then|else";
+const VALID_EXP_START: &'static str = "if|then|else|:|!|-";
 const WHITESPACE_NL_RE: &'static str = " +|\\n+";
 const NUM_RE: &'static str = r"-?[0-9]+";
 const SYM_RE: &'static str = "\"[.]\"";
@@ -34,6 +35,7 @@ enum Val {
     Sym(String),
     Bool(bool),
     Nil,
+    Command(String, Vec<Box<Val>>)
 }
 
 impl Clone for Val {
@@ -42,7 +44,8 @@ impl Clone for Val {
             Val::Num(ref value) => Val::Num(value.clone()),
             Val::Sym(ref value) => Val::Sym(value.clone()),
             Val::Bool(ref value) => Val::Bool(value.clone()),
-            Val::Nil => Val::Nil,
+            Val::Command(ref cmd, ref args) => Val::Command(cmd.clone(), args.clone()),
+            Val::Nil => Val::Nil
         }
     }
 }
@@ -63,7 +66,8 @@ enum Exp {
     Binary(Box<Exp>, BinaryOp, Box<Exp>),
     Unary(UnaryOp, Box<Exp>),
     If(Box<Exp>, Box<Exp>, Box<Exp>),
-    Empty,
+    Command(String, Vec<Exp>),
+    Empty
 }
 
 /************************************* parser ****************************************************/
@@ -92,11 +96,34 @@ fn parse(raw_code: &str) -> Vec<Exp> {
 }
 
 fn parse_line<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
-    let e = try!(expr(ts));
-    if let Some(token) = ts.peek() {
-        Err(format!("unknown token \'{}\'", token))
+    toplevel(ts)
+}
+
+/*************************************** EXPERIMENTAL ********************************************/
+
+fn toplevel<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
+    //let arg_re = Regex::new(FILENAME_RE);
+    let token = match ts.peek() {
+        Some(op) => op.clone(),
+        None => return Ok(Exp::Empty),
+    };
+    if Regex::new(VALID_EXP_START).unwrap().is_match(token) {
+        expr(ts)
     } else {
-        Ok(e)
+        let mut args = Vec::new();
+        while let Some(op) = ts.next() {
+            match op.as_ref() {
+                "[" => {
+                    args.push(try!(expr(ts)));
+                    match ts.next() {
+                        Some(ch) if ch.to_string() != "]".to_string() => return Err("expected closing bracket".to_string()),
+                        _ => return Err("missing closing parenthesis".to_string()),
+                    };
+                },
+                arg => args.push(Exp::Literal(Val::Sym(arg.to_string())))
+            }
+        }
+        Ok(Exp::Command(token.to_string(), args))
     }
 }
 
@@ -293,7 +320,8 @@ fn print_value(v: Val) {
         Val::Num(value) => println!("{} : Num", value),
         Val::Bool(value) => println!("{} : Bool", value),
         Val::Sym(value) => println!("{} : Sym", value ),
-        Val::Nil => println!("nil : Nil")
+        Val::Nil => println!("nil : Nil"),
+        Val::Command(_, _) => printerr!("bug in evaluator")
     };
 }
 
@@ -301,7 +329,7 @@ fn eval_exps(exps: Vec<Exp>) {
     for e in exps {
         match eval(e) {
             Ok(v) => print_value(v),
-            Err(err) => printerr!("error evalution expression: {}", err)
+            Err(err) => printerr!("error evaluating expression: {}", err)
         };
     }
 }
@@ -311,7 +339,8 @@ fn expect_num(v: Val) -> Result<i64, String> {
         Val::Num(value) => Ok(value),
         Val::Bool(_) => Err("expected num, got bool".to_string()),
         Val::Sym(_) => Err("expected num, got sym".to_string()),
-        Val::Nil => Err("expected num, got nil".to_string())
+        Val::Nil => Err("expected num, got nil".to_string()),
+        Val::Command(_, _) => Err("bug in evaluator".to_string())
     }
 }
 
@@ -320,7 +349,8 @@ fn expect_bool(v: Val) -> Result<bool, String> {
         Val::Num(_) => Err("expected bool, got num".to_string()),
         Val::Bool(value) => Ok(value),
         Val::Sym(_) => Err("expected bool, got sym".to_string()),
-        Val::Nil => Err("expected bool, got nil".to_string())
+        Val::Nil => Err("expected bool, got nil".to_string()),
+        Val::Command(_, _) => Err("bug in evaluator".to_string())
     }
 }
 
@@ -361,12 +391,29 @@ fn eval_if(cond: Exp, branch1: Exp, branch2: Exp) -> Result<Val, String> {
     }
 }
 
+fn execute_command(cmd: &str, args: Vec<&str>) {
+
+}
+
+fn eval_command(cmd: &str, args: Vec<Exp>) -> Result<Val, String> {
+    let mut arg_vals = Vec::new();
+    for arg in args {
+        let arg_val = match try!(eval(arg)) {
+
+        }
+        arg_vals.push(try!(eval(arg));
+    }
+
+    Ok(Val::Nil)
+}
+
 fn eval(e: Exp) -> Result<Val, String> {
     match e {
         Exp::Literal(value) => Ok(value),
         Exp::Binary(left, op, right) => eval_binop(*left, op, *right),
         Exp::Unary(operator, operand) => eval_unop(operator, *operand),
         Exp::If(cond, branch1, branch2) => eval_if(*cond, *branch1, *branch2),
+        Exp::Command(cmd, args) => eval_command(&cmd, args),
         Exp::Empty => Ok(Val::Nil)
     }
 }
@@ -384,8 +431,11 @@ fn main() {
     loop {
         print!("{} ", PROMPT);
         io::Write::flush(&mut io::stdout()).expect("flush failed!");
-        
+
         let mut code = String::new();
+        let mut num_parens = 0;
+        let mut num_brackets = 0;
+        
         match stdin.lock().read_line(&mut code) {
             Ok(_n) => {
                 code.pop();
