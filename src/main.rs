@@ -7,7 +7,7 @@ use regex::*;
 use std::{env, io};
 use std::collections::HashMap;
 use std::str::FromStr;
-
+use std::process::Command;
 macro_rules! printerr(
     ($($arg:tt)*) => { {
         let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
@@ -102,7 +102,6 @@ fn parse_line<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
 /*************************************** EXPERIMENTAL ********************************************/
 
 fn toplevel<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
-    //let arg_re = Regex::new(FILENAME_RE);
     let token = match ts.peek() {
         Some(op) => op.clone(),
         None => return Ok(Exp::Empty),
@@ -391,20 +390,29 @@ fn eval_if(cond: Exp, branch1: Exp, branch2: Exp) -> Result<Val, String> {
     }
 }
 
-fn execute_command(cmd: &str, args: Vec<&str>) {
-
+fn execute_command(cmd: &str, args: Vec<String>) -> Result<Val, String> {
+    println!("cmd: |{}|", cmd);
+    let output = Command::new(cmd)
+                     .args(args)
+                     .output()
+                     .expect(&format!("command \'{}\'", cmd));
+    Ok(Val::Sym(String::from_utf8(output.stderr).expect("unable to convert bytes to string")))
 }
 
 fn eval_command(cmd: &str, args: Vec<Exp>) -> Result<Val, String> {
     let mut arg_vals = Vec::new();
     for arg in args {
         let arg_val = match try!(eval(arg)) {
-
-        }
-        arg_vals.push(try!(eval(arg));
+            Val::Num(v) => v.to_string(),
+            Val::Bool(v) => v.to_string(),
+            Val::Sym(v) => v,
+            Val::Nil => "".to_string(),
+            Val::Command(_cmd, _args) => return Err("not sure what I should do here".to_string())
+        };
+        arg_vals.push(arg_val);
     }
 
-    Ok(Val::Nil)
+    execute_command(cmd, arg_vals)
 }
 
 fn eval(e: Exp) -> Result<Val, String> {
@@ -435,7 +443,7 @@ fn main() {
         let mut code = String::new();
         let mut num_parens = 0;
         let mut num_brackets = 0;
-        
+
         match stdin.lock().read_line(&mut code) {
             Ok(_n) => {
                 code.pop();

@@ -1,10 +1,10 @@
-top-level     ::= exp
-                | cmdname (arg_name | "[" exp "]" )* (";" top-level)*;
-exp           ::= literal
-                | "if" exp "then" exp "else" exp
+top-level     ::= "[" exp "]"
+                | command (";" top-level)*;
+command       ::= cmdname (arg_name | "[" exp "]" )*;
+exp           ::= "if" exp "then" exp "else" exp
                 | ":" variable
-                | equality
-                | "[" cmdname (arg_name | "[" exp "]" )* "]";
+                | "[" command "]";
+                | equality;
 equality      ::= compare ( ( "!=" | "==" ) compare )*;
 compare       ::= boolop ( (">=" | "<=" | "<" | ">") boolop )*;
 boolop        ::= term ( ("and" | "or" | "&&" | "or") term)*;
@@ -13,10 +13,10 @@ factor        ::= unary ( ( "/" | "*" | "%" ) unary)*;
 unary         ::= ( "!" | "-" ) unary;
                 | primary
 primary       ::= NUM | SYM | BOOL | "nil"
-                | "(" expression ")";
+                | "(" exp ")";
 def           ::= "let" variable-name exp;
 literal       ::= SYM | NUM | BOOL;
 variable-name ::= :^[a-z_]\\w*$;
-SYM           ::= "^[\w\-. ]+$";
+SYM           ::= """ ^[\w\-. ]+$ """;
 NUM           ::= 0-9 | 0-9 followed by NUM (signed);
 BOOL          ::= true | false;
