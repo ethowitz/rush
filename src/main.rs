@@ -16,17 +16,10 @@ macro_rules! printerr(
 );
 
 const VALID_TOKEN_RE: &'static str =
-    "\\+|-|\\*|/|%|!(?:=)|\\(|\\)|\"|!=|<=|>=|<|>|==|&&|\\|\\||if|then|else";
-const VALID_EXP_START: &'static str = "if|then|else|:|!|-";
+    "\\+|-|\\*|/(?:/)|//|%|!(?:=)|\\(|\\)|\\[|\\]|\"|!=|<=|>=|<|>|==|&&|\\|\\||if|then|else";
 const WHITESPACE_NL_RE: &'static str = " +|\\n+";
 const NUM_RE: &'static str = r"-?[0-9]+";
 const SYM_RE: &'static str = "\"[.]\"";
-
-/*
-    TODO 4/5
-    --> square-bracket all code?
-    --> basic shell functionality
-*/
 
 /********************************* definitions ***************************************************/
 
@@ -106,24 +99,41 @@ fn toplevel<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
         Some(op) => op.clone(),
         None => return Ok(Exp::Empty),
     };
-    if Regex::new(VALID_EXP_START).unwrap().is_match(token) {
-        expr(ts)
-    } else {
-        let mut args = Vec::new();
-        while let Some(op) = ts.next() {
-            match op.as_ref() {
-                "[" => {
-                    args.push(try!(expr(ts)));
-                    match ts.next() {
-                        Some(ch) if ch.to_string() != "]".to_string() => return Err("expected closing bracket".to_string()),
-                        _ => return Err("missing closing parenthesis".to_string()),
-                    };
-                },
-                arg => args.push(Exp::Literal(Val::Sym(arg.to_string())))
-            }
+
+    if token.to_string() == "[".to_string() {
+        ts.next();
+        let e = try!(expr(ts));
+        match ts.next() {
+            Some(ch) if ch.to_string() == "]".to_string() => Ok(e),
+            Some(_) => return Err("expected closing bracket".to_string()),
+            _ => return Err("missing closing bracket".to_string()),
         }
-        Ok(Exp::Command(token.to_string(), args))
+    } else {
+        command(ts)
+        // TODO: handle semi-colons here
     }
+}
+
+fn command<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
+    let cmd = match ts.peek() {
+        Some(op) => op.clone(),
+        None => return Ok(Exp::Empty),
+    };
+    let mut args = Vec::new();
+    while let Some(token) = ts.next() {
+        match token.as_ref() {
+            "[" => {
+                args.push(try!(expr(ts)));
+                match ts.next() {
+                    Some(ch) if ch.to_string() != "]".to_string() => return Err("expected closing bracket".to_string()),
+                    None => return Err("expected closing bracket, got nothing".to_string()),
+                    _ => true,
+                };
+            },
+            arg => args.push(Exp::Literal(Val::Sym(arg.to_string())))
+        }
+    }
+    Ok(Exp::Command(cmd.to_string(), args))
 }
 
 fn expr<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
@@ -244,7 +254,7 @@ fn factor<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
 
     while let Some(op) = ts.clone().peek() {
         match op.as_ref() {
-            "/" => {
+            "//" => {
                 ts.next();
                 e = Exp::Binary(Box::new(e), BinaryOp::Div, Box::new(try!(unary(ts))))
             },
@@ -391,12 +401,10 @@ fn eval_if(cond: Exp, branch1: Exp, branch2: Exp) -> Result<Val, String> {
 }
 
 fn execute_command(cmd: &str, args: Vec<String>) -> Result<Val, String> {
-    println!("cmd: |{}|", cmd);
-    let output = Command::new(cmd)
-                     .args(args)
-                     .output()
-                     .expect(&format!("command \'{}\'", cmd));
-    Ok(Val::Sym(String::from_utf8(output.stderr).expect("unable to convert bytes to string")))
+    let new_proc = Command::new(cmd).arg("-x")//.args(args)
+        .env("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin").output().expect(&format!("command \'{}\' not found", cmd));
+
+    Ok(Val::Sym(String::from_utf8_lossy(&new_proc.stdout).into_owned()))
 }
 
 fn eval_command(cmd: &str, args: Vec<Exp>) -> Result<Val, String> {
@@ -438,7 +446,7 @@ fn main() {
 
     loop {
         print!("{} ", PROMPT);
-        io::Write::flush(&mut io::stdout()).expect("flush failed!");
+        io::Write::flush(&mut io::stdout()).expect("failed to flush stdout buffer");
 
         let mut code = String::new();
         let mut num_parens = 0;
