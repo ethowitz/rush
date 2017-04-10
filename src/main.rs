@@ -4,10 +4,10 @@ extern crate regex;
 extern crate lazy_static;
 
 use regex::*;
-use std::{env, io};
+use std::{env, io, process};
+use std::process::Command;
 use std::collections::HashMap;
 use std::str::FromStr;
-use std::process::Command;
 macro_rules! printerr(
     ($($arg:tt)*) => { {
         let r = writeln!(&mut ::std::io::stderr(), $($arg)*);
@@ -28,7 +28,6 @@ enum Val {
     Sym(String),
     Bool(bool),
     Nil,
-    Command(String, Vec<Box<Val>>)
 }
 
 impl Clone for Val {
@@ -37,7 +36,6 @@ impl Clone for Val {
             Val::Num(ref value) => Val::Num(value.clone()),
             Val::Sym(ref value) => Val::Sym(value.clone()),
             Val::Bool(ref value) => Val::Bool(value.clone()),
-            Val::Command(ref cmd, ref args) => Val::Command(cmd.clone(), args.clone()),
             Val::Nil => Val::Nil
         }
     }
@@ -45,7 +43,13 @@ impl Clone for Val {
 
 type Env = HashMap<String, Val>;
 lazy_static! {
-    static ref ENV: Env = {
+    static ref VAR_ENV: Env = {
+        HashMap::new()
+    };
+}
+
+lazy_static! {
+    static ref ALIAS_ENV: Env = {
         HashMap::new()
     };
 }
@@ -74,6 +78,7 @@ fn parse(raw_code: &str) -> Vec<Exp> {
 
     for line in lines {
         // perform lexical analysis
+        // TODO: only split by tokens within expressions
         let wsnl_re = Regex::new(WHITESPACE_NL_RE).unwrap();
         let tokens_re = Regex::new(VALID_TOKEN_RE).unwrap();
         let temp = tokens_re.replace_all(line, |caps: &Captures| format!(" {} ", &caps[0]));
@@ -115,7 +120,7 @@ fn toplevel<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
 }
 
 fn command<'a>(ts: &mut Tokens<'a>) -> Result<Exp, String> {
-    let cmd = match ts.peek() {
+    let cmd = match ts.next() {
         Some(op) => op.clone(),
         None => return Ok(Exp::Empty),
     };
@@ -329,8 +334,7 @@ fn print_value(v: Val) {
         Val::Num(value) => println!("{} : Num", value),
         Val::Bool(value) => println!("{} : Bool", value),
         Val::Sym(value) => println!("{} : Sym", value ),
-        Val::Nil => println!("nil : Nil"),
-        Val::Command(_, _) => printerr!("bug in evaluator")
+        Val::Nil => println!("nil : Nil")
     };
 }
 
@@ -348,8 +352,7 @@ fn expect_num(v: Val) -> Result<i64, String> {
         Val::Num(value) => Ok(value),
         Val::Bool(_) => Err("expected num, got bool".to_string()),
         Val::Sym(_) => Err("expected num, got sym".to_string()),
-        Val::Nil => Err("expected num, got nil".to_string()),
-        Val::Command(_, _) => Err("bug in evaluator".to_string())
+        Val::Nil => Err("expected num, got nil".to_string())
     }
 }
 
@@ -358,8 +361,7 @@ fn expect_bool(v: Val) -> Result<bool, String> {
         Val::Num(_) => Err("expected bool, got num".to_string()),
         Val::Bool(value) => Ok(value),
         Val::Sym(_) => Err("expected bool, got sym".to_string()),
-        Val::Nil => Err("expected bool, got nil".to_string()),
-        Val::Command(_, _) => Err("bug in evaluator".to_string())
+        Val::Nil => Err("expected bool, got nil".to_string())
     }
 }
 
@@ -400,10 +402,13 @@ fn eval_if(cond: Exp, branch1: Exp, branch2: Exp) -> Result<Val, String> {
     }
 }
 
+// Command::new should inherit the parent's environment...
+// also, handle command not found case (match for Err)
 fn execute_command(cmd: &str, args: Vec<String>) -> Result<Val, String> {
-    let new_proc = Command::new(cmd).arg("-x")//.args(args)
-        .env("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin").output().expect(&format!("command \'{}\' not found", cmd));
-
+    println!("len: {}", args.len());
+    let new_proc = Command::new(cmd).args(args)
+                                    .output()
+                                    .expect(&format!("command \'{}\' not found", cmd));
     Ok(Val::Sym(String::from_utf8_lossy(&new_proc.stdout).into_owned()))
 }
 
@@ -414,8 +419,7 @@ fn eval_command(cmd: &str, args: Vec<Exp>) -> Result<Val, String> {
             Val::Num(v) => v.to_string(),
             Val::Bool(v) => v.to_string(),
             Val::Sym(v) => v,
-            Val::Nil => "".to_string(),
-            Val::Command(_cmd, _args) => return Err("not sure what I should do here".to_string())
+            Val::Nil => "".to_string()
         };
         arg_vals.push(arg_val);
     }
@@ -449,8 +453,8 @@ fn main() {
         io::Write::flush(&mut io::stdout()).expect("failed to flush stdout buffer");
 
         let mut code = String::new();
-        let mut num_parens = 0;
-        let mut num_brackets = 0;
+        //let mut num_parens = 0;
+        //let mut num_brackets = 0;
 
         match stdin.lock().read_line(&mut code) {
             Ok(_n) => {
